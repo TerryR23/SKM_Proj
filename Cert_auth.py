@@ -11,8 +11,9 @@ class Certificate():
     self.KDK = bytearray
     self.MK = bytearray
     
-'''The Function below will take the Two devices that are trying to communicate ad create a KDK value between them. This function is being moved to the Devices to support Custom ordering of inputs for HASH function.'''
+
   def KDK_create(self, ID_A:bytes, ID_B:bytes):
+    '''The Function below will take the Two devices that are trying to communicate ad create a KDK value between them. This function is being moved to the Devices to support Custom ordering of inputs for HASH function.'''
     if (self.ID == None):
       self.ID = self.ID_create()
       
@@ -32,13 +33,20 @@ class Device():
     self.certificate = certificate
     self.PubKey = b''
     self.MPubKey= b''
-    self.Status = [1,0] '''[client,Host] tells you whether the device is configured to be a client or a host and if the certificate has already been duplicated'''
-    self.Host = False
+    '''[client,Host] tells you whether the device is configured to be a client or a host and if the certificate has already been duplicated'''
+    self.Status = [1,0]
     self.ID = certificate.ID_create()
     self.Name = Name
+    self.Connections = {}
 
   def KDK_create(self, ID_Cert, ID_B):
     '''self will be the devices person ID value; ID_cert will contain the ID value of the certificate; ID_B will be the ID value of the device it wishes to comminicate with'''
-    self.Certificate.KDK = SHA256(self.ID, self.certificate.ID, ID_B)
+    KDK_Val = SHA256(self.ID, self.certificate.ID, ID_B) #Not a proper Hash declaration, just a fill in
+    self.Connections[f'{self.ID}:{ID_B}'] = KDK_Val
+    '''May need to be kept in the certificate later. for now the device will keep a running dictionary of the various connections and KDK values and when a message is sent the needed KDK is pulled and used'''
     return  
   
+  def other_KDK (self):
+    '''This function works with no arguements. using the KDK in the certificate, along with the PK value stored by the device, derives what the targeted deviced KDK will be'''
+    My_KDK = self.certificate.My_KDK
+    Pub_Key = self.PubKey

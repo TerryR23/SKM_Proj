@@ -52,7 +52,8 @@ int Get_Bytes(unsigned char *dest, int NUMBYTES);
 
 int block_Cipher( int messagelen);
 
-int AES_CBC(unsigned char *)
+int AES_CBC(unsigned char * text, int messagelen, unsigned char * cipher);
+
 
 
 
@@ -113,5 +114,24 @@ int Create_Device(struct Cert_Auth * CA, char NAME[]){
 
 int Get_Bytes(unsigned char *dest, int NUMBYTES){
     arc4random_buf(dest, NUMBYTES);
+    return 0;
+};
+
+
+
+int AES_CBC(unsigned char * text, int messagelen, unsigned char * cipher){
+    unsigned char temp[16];
+    unsigned char * current = temp;
+    int CycleCount;
+    unsigned char * MesSt;
+    unsigned char * MesFin;
+    for( CycleCount = 0; CycleCount < (messagelen/32); CycleCount++){
+        memcpy((char *) current, (char *) &text[16*CycleCount], 16);
+        
+        
+    }
+    
+    
+    
     return 0;
 };

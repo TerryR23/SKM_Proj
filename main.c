@@ -13,6 +13,8 @@
 #include <sys/random.h>
 #include <stdlib.h>
 #include "AES.c"
+#include "connect.c"
+
 
 
 

@@ -4,7 +4,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-int main (int argc, const char * argv[]){
+int Make_Connection(int port_num, char * host, unisgned char * dest);
+int Make_Connection(int argc, const char * argv[]){
     struct sockaddr_in serv_addr;
 
     int Client_fd, STATUS;

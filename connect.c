@@ -4,21 +4,14 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-int Make_Connection(int port_num, char * host, unisgned char * dest);
-int Make_Connection(int argc, const char * argv[]){
-    struct sockaddr_in serv_addr;
+/*takes in hostname and port number and returning the Client fd*/
 
+int Make_Connection(int port_num, unisgned char * dest){
+   struct sockaddr_in serv_addr;
+    char host[] = "192.0.0.1";
     int Client_fd, STATUS;
-    
-    if (argc != 3) {
-        printf("Usage: %s <IP Address> <Port>", argv[0]);
-        return -1;
-    }
 
-    char *HOST = argv[1];
-    int PORT = atoi(argv[2]);
-
-    if (PORT <= || PORT > 65535){
+    if (port_num <= || port_num > 65535){
         printf("Invalid port #");
         return -1;
     }
@@ -29,9 +22,10 @@ int Make_Connection(int argc, const char * argv[]){
     }
 
     serv_addr.sinfamily = AF_INET;
-    serv_addr.sin_port = htons(PORT);
+    serv_addr.sin_port = htons(port_num);
+    server_addr.sin_addr.s_addr = inet_addr(char * dest);
 
-    if (inet_pton(AF_INET, HOST, &serv_addr.sin_addr) <= 0){
+    if (inet_pton(AF_INET, host, &serv_addr.sin_addr) <= 0){
         printf("\n Host not found, closing program \n");
         return -1;
     }
@@ -42,6 +36,7 @@ int Make_Connection(int argc, const char * argv[]){
     }
 
     printf("Connected Successfuly!\n");
-    return 0;
+    return Client_fd;
     
     };
+    

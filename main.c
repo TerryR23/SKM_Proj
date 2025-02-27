@@ -12,11 +12,12 @@
 #include <unistd.h>
 #include <sys/random.h>
 #include <stdlib.h>
-
+#include "AES.c"
 
 
 
 #define HASH_Algo "SHA256"
+#define MAX_MES 300
 
 struct Certificate {
     char Device_Num;
@@ -53,6 +54,7 @@ int Get_Bytes(unsigned char *dest, int NUMBYTES);
 int block_Cipher( int messagelen);
 
 int AES_CBC(unsigned char * text, int messagelen, unsigned char * cipher);
+int Get_Message(unsigned char * message);
 
 
 
@@ -91,9 +93,20 @@ int main(int argc, const char * argv[]) {
         Host.port_Num = 65000;
         Host.Device_Num = 1;
         Host.Num_of_Devices = 0;
-        
     }
     
+    if (set_mode == 2){
+        struct Device Device;
+        Get_Bytes((unsigned char *) Device.Device_Name, 30);
+        Get_Bytes(&Device.ID_num, 1);
+        Device.Device_Num = 1;
+        Device.KDF = HASH_Algo;
+        Get_Bytes(Device.Key, 32);
+        char message[MAX_MES];
+        if ((Get_Message(message)) =!0){puts("Error getting message \n");return -1;};
+        if ((AES_Block(message, Device.key)) =! 0){puts("error encryting message \n"); return -1;};
+
+    }
     
 
     printf("Hello, World!\n");
@@ -133,5 +146,12 @@ int AES_CBC(unsigned char * text, int messagelen, unsigned char * cipher){
     
     
     
+    return 0;
+};
+
+int Get_Message(unsigned char * message){
+    char temp[MAX_MES];
+    scanf("%s", temp);
+    strcpy((char *) message, temp);
     return 0;
 };

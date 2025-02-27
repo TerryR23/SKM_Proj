@@ -6,9 +6,9 @@
 
 /*takes in hostname and port number and returning the Client fd*/
 
-int Make_Connection(int port_num, char * host, unisgned char * dest){
+int Make_Connection(int port_num, unisgned char * dest){
    struct sockaddr_in serv_addr;
-
+    char host[] = "192.0.0.1";
     int Client_fd, STATUS;
 
     if (port_num <= || port_num > 65535){
@@ -22,9 +22,9 @@ int Make_Connection(int port_num, char * host, unisgned char * dest){
     }
 
     serv_addr.sinfamily = AF_INET;
-    serv_addr.sin_port = htons(PORT);
+    serv_addr.sin_port = htons(port_num);
 
-    if (inet_pton(AF_INET, HOST, &serv_addr.sin_addr) <= 0){
+    if (inet_pton(AF_INET, host, &serv_addr.sin_addr) <= 0){
         printf("\n Host not found, closing program \n");
         return -1;
     }

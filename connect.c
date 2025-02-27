@@ -23,6 +23,7 @@ int Make_Connection(int port_num, unisgned char * dest){
 
     serv_addr.sinfamily = AF_INET;
     serv_addr.sin_port = htons(port_num);
+    server_addr.sin_addr.s_addr = inet_addr(char * dest);
 
     if (inet_pton(AF_INET, host, &serv_addr.sin_addr) <= 0){
         printf("\n Host not found, closing program \n");

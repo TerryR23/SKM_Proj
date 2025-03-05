@@ -6,12 +6,12 @@
 
 /*takes in hostname and port number and returning the Client fd*/
 
-int Make_Connection(int port_num, unisgned char * dest){
-   struct sockaddr_in serv_addr;
+int Make_Connection(int port_num, unsigned char * dest){
+    struct sockaddr_in serv_addr;
     char host[] = "192.0.0.1";
     int Client_fd, STATUS;
 
-    if (port_num <= || port_num > 65535){
+    if (port_num <= 0 || port_num > 65535){
         printf("Invalid port #");
         return -1;
     }
@@ -21,11 +21,11 @@ int Make_Connection(int port_num, unisgned char * dest){
         return -1;
     }
 
-    serv_addr.sinfamily = AF_INET;
+    serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port_num);
-    server_addr.sin_addr.s_addr = inet_addr(char * dest);
+    serv_addr.sin_addr.s_addr = inet_addr(dest);
 
-    if (inet_pton(AF_INET, host, &serv_addr.sin_addr) <= 0){
+    if (inet_pton(AF_INET, dest, &serv_addr.sin_addr) <= 0){
         printf("\n Host not found, closing program \n");
         return -1;
     }
@@ -38,5 +38,5 @@ int Make_Connection(int port_num, unisgned char * dest){
     printf("Connected Successfuly!\n");
     return Client_fd;
     
-    };
+    }
     

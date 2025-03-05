@@ -35,7 +35,7 @@ struct Device {
     const char KDF;
     unsigned char Key[32];
     char Device_Name[30];
-    char * Connections[];
+    char * Connections[2];
 };
 
 struct Cert_Auth{
@@ -57,6 +57,7 @@ int block_Cipher( int messagelen);
 
 int AES_CBC(unsigned char * text, int messagelen, unsigned char * cipher);
 int Get_Message(unsigned char * message);
+int Req_Con(char * Dest);
 
 
 
@@ -107,6 +108,7 @@ int main(int argc, const char * argv[]) {
         char message[MAX_MES];
         if ((Get_Message(message)) =!0){puts("Error getting message \n");return -1;};
         if ((AES_Block(message, Device.key)) =! 0){puts("error encryting message \n"); return -1;};
+        Make_Connection(50000, /* create the code needed to retrieve an IP address*/)
 
     }
     

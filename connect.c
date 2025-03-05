@@ -9,7 +9,7 @@
 int Make_Connection(int port_num, unsigned char * dest){
     struct sockaddr_in serv_addr;
     char host[] = "192.0.0.1";
-    int Client_fd, STATUS;
+    int Client_fd, STATUS; 
 
     if (port_num <= 0 || port_num > 65535){
         printf("Invalid port #");

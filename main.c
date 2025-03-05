@@ -20,6 +20,7 @@
 
 #define HASH_Algo "SHA256"
 #define MAX_MES 300
+#define MAX_CONNECTIONS 10
 
 struct Certificate {
     char Device_Num;
@@ -44,20 +45,26 @@ struct Cert_Auth{
     int port_Num;
     char Device_Name[30];
     int Num_of_Devices;
-    struct Device * Devices[5];
-
+    void * DNS = struct DNS_Server;
 };
 
 
-int main( int argc, const char * argv[]);
+
+struct DNS_Server{
+    struct connection * connectections[MAX_CONNECTIONS];
+};
+
+struct connection{
+    char name[30];
+    int port;
+    unsigned char IP[4];
+};
+
+
 int Create_Device(struct Cert_Auth * CA, char NAME[27]);
 int Get_Bytes(unsigned char *dest, int NUMBYTES);
-
-int block_Cipher( int messagelen);
-
-int AES_CBC(unsigned char * text, int messagelen, unsigned char * cipher);
 int Get_Message(unsigned char * message);
-int Req_Con(char * Dest);
+ void * Request_Connection(char name[30], void * DNS_Server);
 
 
 
@@ -134,28 +141,21 @@ int Get_Bytes(unsigned char *dest, int NUMBYTES){
     return 0;
 };
 
-
-
-int AES_CBC(unsigned char * text, int messagelen, unsigned char * cipher){
-    unsigned char temp[16];
-    unsigned char * current = temp;
-    int CycleCount;
-    unsigned char * MesSt;
-    unsigned char * MesFin;
-    for( CycleCount = 0; CycleCount < (messagelen/32); CycleCount++){
-        memcpy((char *) current, (char *) &text[16*CycleCount], 16);
-        
-        
-    }
-    
-    
-    
-    return 0;
-};
-
 int Get_Message(unsigned char * message){
     char temp[MAX_MES];
     scanf("%s", temp);
     strcpy((char *) message, temp);
     return 0;
+};
+
+unsigned char Request_Connection(char name[30], struct Cert_Auth * CA){
+    int i;
+
+    for (i =0; i < CA->num_of_devices; i++){
+        if (strcmp(name, CA->DNS -> connections[i].name) == 0 ){
+            return CA->DNS->connections[i].IP;
+        }
+
+    } 
+    
 };

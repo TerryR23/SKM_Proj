@@ -39,4 +39,20 @@ int Make_Connection(int port_num, unsigned char * dest){
     return Client_fd;
     
     }
+int main() {    
+    char dest [256];
+    int port_num;
     
+    printf("Enter the hostnmae/IP: ");
+    fgets(dest, sizeof(dest), stdin);
+    dest[strcspn(dest, "\n")] = '\0';
+    printf("Enter the port number: ");
+    scanf("%d", &port_num);
+    
+    int Client_fd = Make_Connection(port_num, (unsigned char*) dest);
+    
+    if (Client_fd == -1){
+        printf("Connection Failed\n");
+        return -1;
+    }
+}

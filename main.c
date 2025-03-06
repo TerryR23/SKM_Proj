@@ -153,8 +153,10 @@ unsigned char Request_Connection(char name[30], struct Cert_Auth * CA){
 
     for (i =0; i < CA->num_of_devices; i++){
         if (strcmp(name, CA->DNS -> connections[i].name) == 0 ){
-            return CA->DNS->connections[i].IP;
+            char * dest = CA->DNS->connections[i].IP;
+            return *dest;
         }
     } 
-    
+    printf("device not found...Please try again\n");
+    return void;
 };

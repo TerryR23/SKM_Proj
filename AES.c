@@ -2,11 +2,7 @@
 //
 
 #include <stdio.h>
-#include <semaphore.h>
 #include <string.h>
-#include <strhash.h>
-#include <unistd.h>
-#include <sys/random.h>
 #include <stdlib.h>
 #include <openssl/aes.h>        //AES library where it block size is 16 byts, 128 bits
 

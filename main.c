@@ -155,7 +155,6 @@ unsigned char Request_Connection(char name[30], struct Cert_Auth * CA){
         if (strcmp(name, CA->DNS -> connections[i].name) == 0 ){
             return CA->DNS->connections[i].IP;
         }
-
     } 
     
 };

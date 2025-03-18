@@ -20,7 +20,7 @@
 
 struct Certificate {
     int Device_Num;
-    unsigned char ID_Num;
+    unsigned char ID_val[8];
     char Device_Name[30];
     char CA_Name[30];
     char Key_Derivation_Function[15];
@@ -28,14 +28,13 @@ struct Certificate {
 };
 struct Cert_Auth {
     int Device_Num;
-    unsigned char ID_Num;
+    unsigned char ID_Num[8];
     int port_Num;
     char Device_Name[30];
     int Num_of_Devices;
     struct DNS_Server * DNS;
 };
 struct Device {
-    unsigned char Key[32];
     int Num_of_connections;
     char Device_Name[30];
     struct connection * Connections[2];
@@ -51,16 +50,32 @@ struct connection{
     char name[30];
     unsigned char IP[4];
     int port_Num;
+    unsigned char key[24];
 };
 
 int Create_CertAuth(struct Cert_Auth * CA, struct DNS_Server * DNS);
+
 int Create_Device(char Name[],struct Device * Target);
+
 int Get_Bytes(void * dest, int NUMBYTES);
+
 int Get_Message(char message[]);
+
 unsigned char * Request_Connection(char name[30], struct Cert_Auth * CA);
+
 int Register_Device(struct Device * Target,struct connection * Dev_connect, struct connection * Host_connect,  struct Cert_Auth * CA, struct Certificate * Cert);
+
 int CD2H(struct Device * Dev, struct Cert_Auth * Host, struct connection * connection);
+
 int CH2D(struct Cert_Auth * Host, struct Device * Dev, struct connection * connection);
+
+int Load_Key(struct Certificate * Cert);
+
+int Create_key(struct Device * Dev1, struct Device * Dev2, struct Cert_Auth * Host);
+
+int Create_Block( char ** message, int Block_len);
+
+int Enc( char ** message, size_t message_len, struct Device * Dev);
 
 
 
@@ -77,7 +92,6 @@ int main(int argc, const char * argv[]){
     
     for (int i =0; i< argc; i++){
         flag = *argv[i];
-        printf("%c\n",flag);
     }
         switch (flag){
             case 'C':
@@ -117,7 +131,7 @@ int main(int argc, const char * argv[]){
             printf("Device Name: %s \n", Dev.Device_Name);
             return 0;
             char Dest[30];
-            Get_Bytes(&Dev.Cert->ID_Num, 1);
+            Get_Bytes(&Dev.Cert->ID_val, 1);
             Dev.Cert->Device_Num = 1;
             printf("Who do you want to talk to? \n");
             scanf("%29s",Dest);
@@ -129,23 +143,37 @@ int main(int argc, const char * argv[]){
 
         case 3:
             puts("Beginning Test Now....\n");
-            struct Device Test_Dev;
+            struct Device Test_Dev,Test_Dev2;
             struct Cert_Auth Test_Host;
             struct DNS_Server Test_DNS;
-            struct connection Dev_connect, Host_connect;
-            struct Certificate Test_Cert;
+            struct connection Dev1toHost_connect, HosttoDev1_connect, Dev1toDev2_connect;
+            struct connection Dev2toHost_connect, HosttoDev2_connect, Dev2toDev1_connect;
+            struct Certificate Test_Cert, Test_Cert2;
             Create_CertAuth(&Test_Host, &Test_DNS);
             printf("Certificate Authority Name: %s \n", Test_Host.Device_Name);
-            Create_Device("device1", &Test_Dev);
+            Create_Device("Device1", &Test_Dev);
+            Create_Device("Device2", &Test_Dev2);
             printf("Device Name: %s \n", Test_Dev.Device_Name);
             puts("Attempting to register device on the network...\n");
             
-            if( Register_Device(&Test_Dev, &Dev_connect, &Host_connect, &Test_Host, &Test_Cert) != 0){puts("Error registering Device to network...\n"); return -1; };
+            if( Register_Device(&Test_Dev, &Dev1toHost_connect, &HosttoDev1_connect, &Test_Host, &Test_Cert) != 0){puts("Error registering Device to network...\n"); return -1; };
+            Register_Device(&Test_Dev2, &Dev2toHost_connect, &HosttoDev2_connect, &Test_Host, &Test_Cert2);
+            
             
             printf("Device Certificate name is: %s \n", Test_Dev.Cert->Device_Name);
             printf("Device connected to: %s  on port: %d \n", Test_Dev.Connections[0]->name, Test_Dev.Connections[0]->port_Num);
             
             printf("Certificate Authority connected to: %s   on port: %d \n", Test_Host.DNS->connections[0]->name, Test_Host.DNS->connections[0]->port_Num);
+            puts("Testing key generations");
+            
+            Test_Dev.Connections[1] = &Dev1toDev2_connect;
+            Test_Dev2.Connections[1] = &Dev2toDev1_connect;
+            Load_Key(Test_Dev.Cert);
+            Load_Key(Test_Dev2.Cert);
+            strncpy(Test_Dev.Connections[1]->name, Test_Dev2.Device_Name, 30);
+            strncpy(Test_Dev2.Connections[1]->name, Test_Dev.Connections[1]->name, 30);
+            if((Create_key(&Test_Dev, &Test_Dev2, &Host)) != 0){puts("Error making key."); return -1;};
+            Create_key(&Test_Dev2, &Test_Dev, &Host);
             
             int convo = Make_Connection(60000, "127.0.0.1");
             printf("using fd: %d  and talking on port: %d  to IP: %s\n",convo, 60000, "127.0.0.1");
@@ -235,3 +263,69 @@ int CH2D(struct Cert_Auth * Host, struct Device * Dev, struct connection * conne
     Host->DNS->connections[(Host->Num_of_Devices)-1] = connection;
     return 0;
 };
+
+int Load_Key(struct Certificate * Cert){
+    Get_Bytes(&Cert->ID_val, 8);
+    return 0;
+}
+/* This function belongs to the certifcate authority*/
+int Create_key(struct Device * Dev1, struct Device * Dev2, struct Cert_Auth * Host){
+    unsigned char key_val[24];
+    struct Device * first= NULL;
+    struct Device * second= NULL;
+    int i, STATUS;
+    for (i = 0; i< 24; i++){
+        key_val[i]=0;
+    }
+    STATUS = 0;
+    unsigned char * key_ptr =key_val;
+    for(i=0 ; i<30 ; i++ ){
+        if(Dev1->Device_Name[i] != Dev2->Device_Name[i]){
+            if (Dev1->Device_Name[i] < Dev2->Device_Name[i]) {
+                first = Dev2;
+                second = Dev1;
+            }else{
+                first = Dev1;
+                second = Dev2;
+            }
+        }
+    }
+    if( first ==NULL || second ==NULL){first = Dev1; second = Dev2;};
+    strncat((char*)key_ptr, (const char*)first->Cert->ID_val, 8);
+    strncat((char*)key_ptr, (const char*)second->Cert->ID_val, 8);
+    strncat((char*)key_ptr, (const char*)first->CA->ID_Num, 8);
+    strncpy((char*)first->Connections[1]->key, (const char *)key_ptr, 24);
+    printf("Key made. The key on %s is:", Dev2->Device_Name);
+    for (i=0; i<24; i++){
+        printf("%hhx", first->Connections[1]->key[i]);
+    }
+    puts("\n");
+    STATUS = 1;
+    
+    if( STATUS == 0){return -1;};
+    return 0;
+};
+
+int Create_Block(char ** message, int Block_len){
+    size_t len = strlen(*message);
+    if ((len % Block_len) != 0){
+        len += 16 - (len % Block_len);
+    }
+    char * block_mess = malloc(len);
+    *message = block_mess;
+    return 0;
+    };
+
+/*int Enc(char ** message, size_t message_len, struct Device * Dev){
+    int i;
+    
+
+    for( i =0; i < message_len; i += 16){
+        unsigned char * buffer = malloc(16);
+        for (int c = 0; c< 16; c++){
+            buffer[c] = *message[c*i] + Dev->
+        }
+    }
+    return 0;
+}
+ */

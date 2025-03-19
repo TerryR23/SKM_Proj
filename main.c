@@ -17,6 +17,7 @@
 #define MAX_MES 300
 #define MAX_CONNECTIONS 10
 #define MIN_PORT 50000
+#define BLOCK_LEN 16
 
 struct Certificate {
     int Device_Num;
@@ -73,11 +74,11 @@ int Load_Key(struct Certificate * Cert);
 
 int Create_key(struct Device * Dev1, struct Device * Dev2, struct Cert_Auth * Host);
 
-int Create_Block( char ** message, int Block_len);
+int Create_Block( char ** message);
 
-int Enc( char ** message, size_t message_len, struct Device * Dev);
+unsigned char * Enc(unsigned char * message, unsigned char * key[BLOCK_LEN +8]);
 
-
+unsigned char * Block_Cipher(unsigned char message[BLOCK_LEN], unsigned char key[BLOCK_LEN +8]);
 
 
 int main(int argc, const char * argv[]){
@@ -217,7 +218,7 @@ int Get_Bytes(void * dest, int NUMBYTES){
     arc4random_buf(dest, NUMBYTES);
     return 0;
 };
-
+/* This function may be deleted ultimately. can be done using wait and semaphores*/
 int Get_Message(char message[]){
     char temp[MAX_MES];
     scanf("%299s", temp);
@@ -306,26 +307,50 @@ int Create_key(struct Device * Dev1, struct Device * Dev2, struct Cert_Auth * Ho
     return 0;
 };
 
-int Create_Block(char ** message, int Block_len){
+int Create_Block(char ** message){
     size_t len = strlen(*message);
-    if ((len % Block_len) != 0){
-        len += 16 - (len % Block_len);
+    if ((len % BLOCK_LEN) != 0){
+        len += 16 - (len % BLOCK_LEN);
     }
-    char * block_mess = malloc(len);
+    char * block_mess = malloc(len * sizeof(char));
+    for (int i=0;i< len;i++){
+        if (i<strlen(*message)){
+            strncpy(&block_mess[i], message[i], 1);
+        }else{
+            strncpy(&block_mess[i],"0", 1);
+        }
+    }strncpy(&block_mess[len], NULL, 1);
+    
     *message = block_mess;
     return 0;
     };
 
-/*int Enc(char ** message, size_t message_len, struct Device * Dev){
-    int i;
-    
-
-    for( i =0; i < message_len; i += 16){
-        unsigned char * buffer = malloc(16);
-        for (int c = 0; c< 16; c++){
-            buffer[c] = *message[c*i] + Dev->
-        }
+unsigned char * Enc(unsigned char * message, unsigned char * key[BLOCK_LEN +8]){
+    unsigned char * cipher_text = (unsigned char *)malloc(strlen((const char *)message) * sizeof(char));
+    unsigned char buffer[16];
+    unsigned char * ptr = buffer;
+    unsigned char * temp;
+    int count = (int)strlen((const char *) message);
+    int i =0;
+    while( i< count){
+        temp = &message[i];
+        strncpy((char *)ptr, (const char *)temp, 16);
+        strncat((char *)cipher_text, (const char *)Block_Cipher(buffer, *key), 16);
+        i+=16;
+        
     }
-    return 0;
+    /* Add the portion to carry the cipher text as a new value to be used in the next call*/
+    
+    return cipher_text;
 }
- */
+
+
+unsigned char * Block_Cipher(unsigned char message[BLOCK_LEN], unsigned char key[BLOCK_LEN +8]){
+    
+    unsigned char * cipher = (unsigned char *)malloc(BLOCK_LEN *sizeof(char));
+    for (int i = 0; i< BLOCK_LEN; i++){
+        cipher[i] = message[i] ^ key[i];
+        
+    }
+    return cipher;
+}

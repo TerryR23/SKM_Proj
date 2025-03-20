@@ -20,11 +20,13 @@
 #include "connect.c"
 
 
+
 /* pound-defined values*/
 
 #define MAX_CONNECTIONS 3
 #define MIN_PORT_NUM 50000
 #define MAX_BUFFER 256
+#define BLOCK_LEN 16
 enum commands{
     Request_Certificate, /* (Device Name, Device IP address)*/
     Request_KEY, /* (Device Name) */
@@ -52,6 +54,8 @@ struct flags{
 struct Con {
     char Name[MAX_BUFFER];
     int port_out;
+    int fd_write;
+    int fd_read;
     int port_in;
     char IP_addr[15];
     unsigned char ID[8];
@@ -76,7 +80,7 @@ int hostname = 0;
 char Certificate_Authority[256];
 struct Con * connections[MAX_CONNECTIONS];
 char targetbuffer[MAX_BUFFER];
-int NumOfConnections;
+int NumOfConnections = 0;
 int LastPort;
 /* End Variables */
 
@@ -91,9 +95,10 @@ int LastPort;
 /* function Prototypes*/
 int set_flag(int len, const char * options[]);
 int whoAmI(void);
-struct con * CreateConnection(void);
+struct Con * CreateConnect(void);
 int Get_info(int CA, char *dest);
-
+int Create_Block(char ** message);
+void Commands();
 /* End prototypes*/
 
 
@@ -106,6 +111,8 @@ int Get_info(int CA, char *dest);
 
 int main(int argc, const char * argv[]){
     LastPort = MIN_PORT_NUM;
+    int action;
+    char message[MAX_BUFFER * 8];
     for (int i = 0; i<MAX_CONNECTIONS;i++){
         connections[i] = NULL;
     }
@@ -135,11 +142,24 @@ int main(int argc, const char * argv[]){
     }else{
         perror("invalid IP Address"); exit(1);
     }
-   
+    connections[NumOfConnections] = CreateConnect();
     puts("Who would you like to talk to?");
     scanf("%255s",targetbuffer);
     if (Get_info(fd_CA, targetbuffer) != 0){perror("get info error"); exit(1);};
-    Make_Connection(connections[NumOfConnections]->port_out, connections[NumOfConnections]->IP_addr);
+    connections[NumOfConnections]->fd_write = Make_Connection(LastPort, connections[NumOfConnections]->IP_addr);
+    if (connections[NumOfConnections]->fd_write == -1){perror("Make Connection failure"); exit(1);}
+    else{ LastPort++;}
+    connections[NumOfConnections]->fd_read = Make_Connection(LastPort, connections[NumOfConnections]->IP_addr);
+    if (connections[NumOfConnections]->fd_read == -1){perror("Make Connection failure"); exit(1);}
+    else{LastPort++;}
+    Commands();
+    scanf("%1d",&action);
+    switch(action){
+        case 1:
+            puts("What do you want to say?\n Enter message: ");
+            scanf("%s",message);
+    }
+    
     
     return 0;
     
@@ -152,7 +172,7 @@ int main(int argc, const char * argv[]){
 
 
 
-/* function Definitions*/
+/* r Definitions*/
 int set_flag(int len, const char * options[]){
     if( len > 1) {
         for (int i =0; i< len; i++){
@@ -204,21 +224,48 @@ struct Con *CreateConnect(void){
     static struct Con *connection;
     struct Con temp;
     connection = &temp;
-    temp.port_out = LastPort;
-    temp.port_in = LastPort +1;
-    LastPort += 2;
     return connection;
 }
 int Get_info(int CA, char * dest){
-    struct Con temp;
     if(&dest[0] != NULL){
         write(CA, "2", sizeof(char));
         write(CA, hostbuffer, MAX_BUFFER);
         write(CA,targetbuffer,MAX_BUFFER);
-        read(CA, temp.Name, sizeof(char)*MAX_BUFFER);
-        read(CA, temp.IP_addr, sizeof(char) * MAX_BUFFER);
-        read(CA, temp.ID, sizeof(char) * 8);
-        connections[NumOfConnections -1] = &temp;
+        read(CA, connections[NumOfConnections]->Name, sizeof(char)*MAX_BUFFER);
+        read(CA, connections[NumOfConnections]->IP_addr, sizeof(char) * MAX_BUFFER);
+        read(CA, connections[NumOfConnections]->ID, sizeof(char) * 8);
+
     }
     return 0;
+}
+
+
+int Create_Block(char ** message){
+    size_t len = strlen(*message);
+    if ((len % BLOCK_LEN) != 0){
+        len += 16 - (len % BLOCK_LEN);
+    }
+    char * block_mess = malloc(len * sizeof(char));
+    for (int i=0;i< len;i++){
+        if (i<strlen(*message)){
+            strncpy(&block_mess[i], message[i], 1);
+        }else{
+            strncpy(&block_mess[i],"0", 1);
+        }
+    }strncpy(&block_mess[len], NULL, 1);
+    
+    *message = block_mess;
+    return 0;
+    };
+
+
+void Commands(void){
+    printf("Connection to %s created successfully. What would you like to do?\n", connections[NumOfConnections]->Name);
+    puts("select from the options below:\n");
+    puts("Option 1: send a message to the connected device.\n");
+    puts("Option 2: Change the device you are talking to");
+    puts("Option 3: Quit the Progam");
+    
+    
+    
 }

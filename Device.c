@@ -28,9 +28,10 @@
 #define MAX_BUFFER 256
 #define BLOCK_LEN 16
 enum commands{
-    Request_Certificate, /* (Device Name, Device IP address)*/
-    Request_KEY, /* (Device Name) */
-    request_device, /* (Device Name, Target Device Name) */
+    register_Device = 48, /* (device Name, Device IP address)*/
+    Request_Certificate = 49, /* (Device Name, Device IP address)*/
+    Request_KEY = 50, /* (Device Name) */
+    request_device = 51, /* (Device Name, Target Device Name) */
     
 };
 
@@ -58,7 +59,7 @@ struct Con {
     int fd_read;
     int port_in;
     char IP_addr[15];
-    unsigned char ID[8];
+    unsigned char ID[BLOCK_LEN];
 };
 
 /*End structures*/
@@ -98,7 +99,11 @@ int whoAmI(void);
 struct Con * CreateConnect(void);
 int Get_info(int CA, char *dest);
 int Create_Block(char ** message);
-void Commands();
+void Commands(void);
+char *itoa(int x);
+int Get_Key(unsigned char *mixKey);
+unsigned char * Enc(unsigned char * message, unsigned char * key[BLOCK_LEN +8]);
+unsigned char * Block_Cipher(unsigned char message[BLOCK_LEN], unsigned char key[BLOCK_LEN +8]);
 /* End prototypes*/
 
 
@@ -121,6 +126,9 @@ int main(int argc, const char * argv[]){
         strncpy(&Certificate_Authority[i], NULL, sizeof(char));
         strncpy(&targetbuffer[i], NULL, sizeof(char));
     }
+    for (int i=0; i< MAX_BUFFER * 8; i++){
+        message[i] = '0';
+    }
     
     set_flag(argc, argv);
     whoAmI();
@@ -130,9 +138,10 @@ int main(int argc, const char * argv[]){
         flags.Host_addr = 1;
     }
     int fd_CA = Make_Connection(MIN_PORT_NUM, Certificate_Authority);
-    if (fd_CA != 0){
+    if (fd_CA != -1){
         NumOfConnections++;
         LastPort++;
+        write(fd_CA,itoa(register_Device),sizeof(char));
         write(fd_CA, hostbuffer, strlen(hostbuffer));
         write(fd_CA, IPbuffer, strlen(IPbuffer));
         read(fd_CA, &cert.Device_Num, sizeof(int));
@@ -158,6 +167,7 @@ int main(int argc, const char * argv[]){
         case 1:
             puts("What do you want to say?\n Enter message: ");
             scanf("%s",message);
+            
     }
     
     
@@ -172,7 +182,7 @@ int main(int argc, const char * argv[]){
 
 
 
-/* r Definitions*/
+/* function Definitions*/
 int set_flag(int len, const char * options[]){
     if( len > 1) {
         for (int i =0; i< len; i++){
@@ -228,17 +238,18 @@ struct Con *CreateConnect(void){
 }
 int Get_info(int CA, char * dest){
     if(&dest[0] != NULL){
-        write(CA, "2", sizeof(char));
+        unsigned char mixkey[BLOCK_LEN/2];
+        write(CA, itoa(request_device), sizeof(char));
         write(CA, hostbuffer, MAX_BUFFER);
         write(CA,targetbuffer,MAX_BUFFER);
         read(CA, connections[NumOfConnections]->Name, sizeof(char)*MAX_BUFFER);
         read(CA, connections[NumOfConnections]->IP_addr, sizeof(char) * MAX_BUFFER);
-        read(CA, connections[NumOfConnections]->ID, sizeof(char) * 8);
+        read(CA, mixkey, sizeof(char) * 8);
+        Get_Key(mixkey);
 
     }
     return 0;
 }
-
 
 int Create_Block(char ** message){
     size_t len = strlen(*message);
@@ -263,9 +274,70 @@ void Commands(void){
     printf("Connection to %s created successfully. What would you like to do?\n", connections[NumOfConnections]->Name);
     puts("select from the options below:\n");
     puts("Option 1: send a message to the connected device.\n");
-    puts("Option 2: Change the device you are talking to");
-    puts("Option 3: Quit the Progam");
+    puts("Option 2: Change the device you are talking to\n");
+    puts("Option 3: Quit the Progam\n");
     
     
     
+}
+
+/* look into converting an interger into a sring the safe and smart way */
+char * itoa(int x){
+    switch(x){
+        case 0:
+            return "0";
+        case 1:
+            return "1";
+        case 2:
+            return "2";
+        case 3:
+            return "3";
+        case 4:
+            return "4";
+        case 5:
+            return "5";
+    }
+    return NULL;
+}
+
+
+int Get_Key(unsigned char * mixKey){
+    unsigned char *temp = connections[NumOfConnections]->ID;
+    unsigned char key[BLOCK_LEN/2];
+    unsigned char * ptr = key;
+    for (int i = 0; i < (BLOCK_LEN/2); i++){
+        key[i] = mixKey[i] ^ connections[0]->ID[i];
+    }
+    strncpy((char *)temp, (char *)ptr, (BLOCK_LEN/2));
+    return 1;
+}
+
+unsigned char * Enc(unsigned char * message, unsigned char * key[BLOCK_LEN +8]){
+    unsigned char * cipher_text = (unsigned char *)malloc(strlen((const char *)message) * sizeof(char));
+    unsigned char buffer[16];
+    unsigned char * ptr = buffer;
+    unsigned char * temp;
+    int count = (int)strlen((const char *) message);
+    int i =0;
+    while( i< count){
+        temp = &message[i];
+        strncpy((char *)ptr, (const char *)temp, 16);
+        strncat((char *)cipher_text, (const char *)Block_Cipher(buffer, *key), 16);
+        i+=16;
+        
+    }
+    /* Add the portion to carry the cipher text as a new value to be used in the next call*/
+    
+    return cipher_text;
+}
+
+
+unsigned char * Block_Cipher(unsigned char message[BLOCK_LEN], unsigned char key[BLOCK_LEN +8]){
+    
+    unsigned char * cipher = (unsigned char *)malloc(BLOCK_LEN *sizeof(char));
+    for (int i = 0; i< BLOCK_LEN; i++){
+        cipher[i] = message[i] ^ key[i];
+        
+    }
+    return cipher;
 }

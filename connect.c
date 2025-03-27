@@ -6,12 +6,16 @@
 
 #define MAX_BUFFER 256
 #define BLOCK_LEN 16
+#define MAX_NUM_OF_CONNECTIONS 10
+
 
 enum commands{
     register_Device = 48, /* (device Name, Device IP address)*/
     Request_Certificate = 49, /* (Device Name, Device IP address)*/
     Request_KEY = 50, /* (Device Name) */
     request_device = 51, /* (Device Name, Target Device Name) */
+    New_Request = 52,
+    New_Message = 53,
     
 };
 

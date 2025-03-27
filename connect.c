@@ -4,9 +4,34 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define MAX_BUFFER 256
+#define BLOCK_LEN 16
+
+enum commands{
+    register_Device = 48, /* (device Name, Device IP address)*/
+    Request_Certificate = 49, /* (Device Name, Device IP address)*/
+    Request_KEY = 50, /* (Device Name) */
+    request_device = 51, /* (Device Name, Target Device Name) */
+    
+};
+
+struct Con {
+    char Name[MAX_BUFFER];
+    int port_out;
+    int fd_write;
+    int fd_read;
+    int port_in;
+    char IP_addr[15];
+    unsigned char ID[BLOCK_LEN];
+    char Message[MAX_BUFFER * 8];
+    struct sockaddr_in Client_addr;
+};
+
+
+
 /*takes in hostname and port number and returning the Client fd*/
 
-int Make_Connection(int port_num, unsigned char * dest){
+int Make_Connection(int port_num, const char * dest){
     struct sockaddr_in serv_addr;
     char host[] = "192.0.0.1";
     int Client_fd, STATUS; 
@@ -39,20 +64,5 @@ int Make_Connection(int port_num, unsigned char * dest){
     return Client_fd;
     
     }
-int main() {    
-    char dest [256];
-    int port_num;
-    
-    printf("Enter the hostnmae/IP: ");
-    fgets(dest, sizeof(dest), stdin);
-    dest[strcspn(dest, "\n")] = '\0';
-    printf("Enter the port number: ");
-    scanf("%d", &port_num);
-    
-    int Client_fd = Make_Connection(port_num, (unsigned char*) dest);
-    
-    if (Client_fd == -1){
-        printf("Connection Failed\n");
-        return -1;
-    }
-}
+ 
+

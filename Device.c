@@ -18,13 +18,14 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include<poll.h>
 #include "connect.c"
 
 
 
 /* pound-defined values*/
 
-#define MAX_CONNECTIONS 3
+
 #define MIN_PORT_NUM 50000
 #define MAX_BUFFER 256
 #define BLOCK_LEN 16
@@ -35,8 +36,8 @@
 struct Certificate {
     int Device_Num;
     unsigned char ID_val[8];
-    char Device_Name[30];
-    char CA_Name[30];
+    char Device_Name[MAX_BUFFER];
+    char CA_Name[MAX_BUFFER];
 } cert;
 
 struct flags{
@@ -46,7 +47,11 @@ struct flags{
     _Bool Test;
 } flags;
 
-
+struct connections {
+    struct pollfd FDs[MAX_NUM_OF_CONNECTIONS+1];
+    struct Con *User_info[MAX_NUM_OF_CONNECTIONS];
+    struct sockaddr_in * Clients[MAX_NUM_OF_CONNECTIONS];
+} Connection_Used;
 
 /*End structures*/
 
@@ -65,11 +70,20 @@ char *IPbuffer = NULL;
 struct hostent *host_entry;
 int hostname = 0;
 char Certificate_Authority[256];
-struct Con * connections[MAX_CONNECTIONS];
 char targetbuffer[MAX_BUFFER];
-int NumOfConnections = 0;
+int NumOfConnections = 1;
 int LastPort;
 int current = 0;
+struct hostent *host_entry;
+struct sockaddr_in Server;
+int Socket;
+char action;
+int Num_of_Clients;
+char Target[MAX_BUFFER];
+unsigned char ID_key[8];
+unsigned char * Temp_key;
+socklen_t client_len = sizeof(Server);
+
 /* End Variables */
 
 
@@ -94,6 +108,7 @@ unsigned char * Block_Cipher(unsigned char message[BLOCK_LEN], unsigned char key
 void Print_Connections(void);
 int Open_Connection(int portnum, const char * dest);
 int Read_Messages(void);
+unsigned char * Make_Key(unsigned char key[8]);
 /* End prototypes*/
 
 
@@ -105,17 +120,17 @@ int Read_Messages(void);
 
 
 int main(int argc, const char * argv[]){
+    
     LastPort = MIN_PORT_NUM;
     int action;
     char message[MAX_BUFFER * 8];
     char * Text = message;
-    for (int i = 0; i<MAX_CONNECTIONS;i++){
-        connections[i] = NULL;
-    }
-    for (int i =0; i<256; i++){
+        
+    for (int i =0; i<MAX_BUFFER; i++){
         strncpy(&hostbuffer[i], NULL, sizeof(char));
         strncpy(&Certificate_Authority[i], NULL, sizeof(char));
         strncpy(&targetbuffer[i], NULL, sizeof(char));
+        strncpy(&cert.CA_Name[i], NULL, sizeof(char));
     }
     for (int i=0; i< MAX_BUFFER * 8; i++){
         message[i] = '0';
@@ -130,63 +145,94 @@ int main(int argc, const char * argv[]){
     }
     int fd_CA = Make_Connection(MIN_PORT_NUM, Certificate_Authority);
     if (fd_CA != -1){
-        NumOfConnections++;
-        LastPort++;
-        current++;
+        Connection_Used.User_info[0] = CreateConnect();
         write(fd_CA,itoa(register_Device),sizeof(char));
         write(fd_CA, hostbuffer, strlen(hostbuffer));
         write(fd_CA, IPbuffer, strlen(IPbuffer));
         read(fd_CA, &cert.Device_Num, sizeof(int));
-        read(fd_CA, cert.ID_val, sizeof(char) * 8);
+        read(fd_CA, Connection_Used.User_info[0]->ID, BLOCK_LEN/2);
+        read(fd_CA, cert.ID_val, BLOCK_LEN/2);
         read(fd_CA, cert.CA_Name, sizeof(char) * 30);
-    }else{
-        perror("invalid IP Address"); exit(1);
+        strncpy(Connection_Used.User_info[0]->Name, cert.CA_Name, sizeof(char)*256);
+        NumOfConnections++;
+        LastPort++;
+        current++;
     }
-    connections[NumOfConnections] = CreateConnect();
-    puts("Who would you like to talk to?");
-    scanf("%255s",targetbuffer);
-    if (Get_info(fd_CA, targetbuffer) != 0){perror("get info error"); exit(1);};
-    connections[NumOfConnections]->fd_write = Make_Connection(LastPort, connections[NumOfConnections]->IP_addr);
-    if (connections[NumOfConnections]->fd_write == -1){perror("Make Connection failure"); exit(1);}
-    else{ LastPort++;
-        if (fork() ==0){
-            
-        }
-    }
-    connections[NumOfConnections]->fd_read = Make_Connection(LastPort, connections[NumOfConnections]->IP_addr);
-    if (connections[NumOfConnections]->fd_read == -1){perror("Make Connection failure"); exit(1);}
-    else{LastPort++;}
+    Socket = socket(AF_INET,SOCK_STREAM,0);
+    if (socket < 0){perror("Failed to create Socket"); exit(1);}
+    Server.sin_family =AF_INET;
+        Server.sin_port = htons(MIN_PORT_NUM + 1);
+    Server.sin_addr.s_addr = INADDR_ANY;
     
-
-    Commands();
+    bind(Socket,(const struct sockaddr *)&Server, sizeof(Server));
+    
+    listen(Socket, MAX_NUM_OF_CONNECTIONS);
+    
+    for( int i =1; i<=MAX_NUM_OF_CONNECTIONS; i++){
+        Connection_Used.FDs[i].fd = -1;
+    }
+    Connection_Used.FDs[0].fd = Socket;
+    Connection_Used.FDs[0].events = POLLIN;
     while (1){
-        scanf("%1d",&action);
-        switch(action){
-            case 1:
-                Read_Messages();
-            case 2:
-                puts("What do you want to say?\n Enter message: ");
-                scanf("%s",message);
-                Create_Block(&Text);
-                write(connections[current]->fd_write, Enc((unsigned char *)Text, connections[current]->ID), MAX_BUFFER);
-                break;
-            case 3:
-                Print_Connections();
-                puts("Who would you like to Talk to? \n Enter Number: ");
-                scanf("%d",&current);
-                puts("What do you want to say?\n Enter message: ");
-                scanf("%s",message);
-                Create_Block(&Text);
-                write(connections[current]->fd_write, Enc((unsigned char *)Text, connections[current]->ID), MAX_BUFFER);
-                break;
-            case 4:
-                puts("Closing Program now... GoodBye!\n");
-                exit(0);
+        int c = 0;
+        while( c == 0){
+            if(poll(Connection_Used.FDs, MAX_NUM_OF_CONNECTIONS, -1) <0){perror("Poll unsuccessful\n"); exit(1);}
+        };
+        
+        if(Connection_Used.FDs[0].revents && POLLIN){
+            int client_sock = accept(Socket,(struct sockaddr *) Connection_Used.Clients[Num_of_Clients], &client_len);
+            for (int i =1; i<MAX_NUM_OF_CONNECTIONS;i++){
+                if(Connection_Used.FDs[i].fd== -1){
+                    Connection_Used.FDs[i].fd = client_sock;
+                    Connection_Used.FDs[i].events = POLLIN;
+                    Num_of_Clients++;
+                    break;
+                }
+            }
         }
-        Commands();
-    }
-    
-    
+        
+        for( int i = 1; i<MAX_NUM_OF_CONNECTIONS; i++){
+            if(Connection_Used.FDs[i].fd == -1) continue;
+            if( Connection_Used.FDs[i].revents && POLLIN){
+                read(Connection_Used.FDs[i].fd, &action, sizeof(char));
+                switch(action){
+                    case 1:
+                        Read_Messages();
+                    case 2:
+                        puts("What do you want to say?\n Enter message: ");
+                        scanf("%s",message);
+                        Create_Block(&Text);
+                        write(Connection_Used.FDs[i].fd, Enc((unsigned char *)Text, Connection_Used.User_info[i]->ID), MAX_BUFFER);
+                        break;
+                    case 3:
+                        Print_Connections();
+                        puts("Who would you like to Talk to? \n Enter Number: ");
+                        scanf("%d",&current);
+                        puts("What do you want to say?\n Enter message: ");
+                        scanf("%s",message);
+                        Create_Block(&Text);
+                        write(Connection_Used.FDs[i].fd, Enc((unsigned char *)Text, Connection_Used.User_info[i]->ID), MAX_BUFFER);
+                        break;
+                        
+                    case 4:
+                        /* Registering a new device to talk to*/
+                        Connection_Used.User_info[NumOfConnections]= CreateConnect();
+                        puts("Who would you like to talk to?");
+                        scanf("%255s",targetbuffer);
+                        if (Get_info(fd_CA, targetbuffer) != 0){perror("get info error"); exit(1);};
+                        Connection_Used.FDs[NumOfConnections].fd = Make_Connection(LastPort, Connection_Used.User_info[NumOfConnections]->IP_addr);
+                        if (Connection_Used.FDs[NumOfConnections].fd == -1){perror("Make Connection failure"); exit(1);}
+                        else{ LastPort++;}
+                        
+                        
+                    case 5:
+                        puts("Closing Program now... GoodBye!\n");
+                        exit(0);
+                }
+                   
+                }
+            }
+        }
     return 0;
     
 }
@@ -250,17 +296,28 @@ struct Con *CreateConnect(void){
     static struct Con *connection;
     static int Num;
     struct Con temp;
+    for(int i= 0; i< MAX_BUFFER; i++){
+        strncpy(&temp.Name[i], NULL, sizeof(char));
+    }
+    for(int i=0;i<BLOCK_LEN;i++){
+        strncpy((char *)&temp.ID[i], NULL, sizeof(char));
+    }
+    for(int i = 0; i<MAX_BUFFER * 8; i++){
+        strncpy(&temp.Message[i], NULL, sizeof(char));
+    }
     connection = &temp;
     return connection;
 }
+
+
 int Get_info(int CA, char * dest){
     if(&dest[0] != NULL){
         unsigned char mixkey[BLOCK_LEN/2];
         write(CA, itoa(request_device), sizeof(char));
         write(CA, hostbuffer, MAX_BUFFER); /* Not needed by the Hosting server*/
         write(CA,targetbuffer,MAX_BUFFER);
-        read(CA, connections[NumOfConnections]->Name, sizeof(char)*MAX_BUFFER);
-        read(CA, connections[NumOfConnections]->IP_addr, sizeof(char) * 16);
+        read(CA, Connection_Used.User_info[NumOfConnections]->Name, sizeof(char)*MAX_BUFFER);
+        read(CA, Connection_Used.User_info[NumOfConnections]->IP_addr, sizeof(char) * 16);
         read(CA, mixkey, sizeof(char) * 8);
         Get_Key(mixkey);
 
@@ -288,12 +345,13 @@ int Create_Block(char ** message){
 
 
 void Commands(void){
-    printf("Connection to %s created successfully. What would you like to do?\n", connections[current]->Name);
+    printf("Connection to %s created successfully. What would you like to do?\n", Connection_Used.User_info[current]->Name);
     puts("select from the options below:\n");
     puts("Option 1: Read incoming Messages. \n");
     puts("Option 2: send a message to the connected device.\n");
     puts("Option 3: Change the device you are talking to\n");
-    puts("Option 4: Quit the Progam\n");
+    puts("Option 4: Register a new connection\n");
+    puts("Option 5: Quit the Progam\n");
     return;
 }
 
@@ -318,11 +376,11 @@ char * itoa(int x){
 
 
 int Get_Key(unsigned char * mixKey){
-    unsigned char *temp = connections[current]->ID;
+    unsigned char *temp = Connection_Used.User_info[current]->ID;
     unsigned char key[BLOCK_LEN/2];
     unsigned char * ptr = key;
     for (int i = 0; i < (BLOCK_LEN/2); i++){
-        key[i] = mixKey[i] ^ connections[0]->ID[i];
+        key[i] = mixKey[i] ^ Connection_Used.User_info[current]->ID[i];
     }
     strncpy((char *)temp, (char *)ptr, (BLOCK_LEN/2));
     return 1;
@@ -376,7 +434,7 @@ unsigned char * Block_Cipher(unsigned char message[BLOCK_LEN], unsigned char key
 void Print_Connection(void){
     if(NumOfConnections <= 1 ){puts("No Unread Messages to Read"); return;}
     for (int i = 0; i< NumOfConnections; i++){
-        printf("connection 1: %s\n", connections[i]->Name);
+        printf("connection 1: %s\n", Connection_Used.User_info[current]->Name);
     }
     return;
 }
@@ -384,11 +442,18 @@ void Print_Connection(void){
 
 int Read_Messages(void){
     for (int i = 0; i < NumOfConnections; i++){
-        read(connections[i+1]->fd_read, connections[i+1]->Message, MAX_BUFFER * 8);
-        unsigned char * message = Dec((unsigned char *)&connections[i+1]->Message, connections[i+1]->ID);
-        printf("Message %d (sent by %s): %s",i,connections[i+1]->Name, message);
+        read(Connection_Used.FDs[i+1].fd, Connection_Used.User_info[current]->Message, MAX_BUFFER * 8);
+        unsigned char * message = Dec((unsigned char *)&Connection_Used.User_info[current]->Message, Connection_Used.User_info[current]->ID);
+        printf("Message %d (sent by %s): %s",i,Connection_Used.User_info[current]->Name, message);
     }
     return 1;
 }
 
 
+unsigned char * Make_Key(unsigned char key[8]){
+    unsigned char key1[8];
+    for (int t = 0; t<8; t++){
+        key[t] = key1[t] ^ Connection_Used.User_info[current]->ID[t];
+    }
+    return key;
+}

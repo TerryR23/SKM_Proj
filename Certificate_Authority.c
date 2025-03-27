@@ -19,7 +19,7 @@
 #include "connect.c"
 
 #define MAX_NAME_LEN 256
-#define MAX_NUM_OF_CONNECTIONS 10
+
 
 /* Structure Definitions*/
 
@@ -47,6 +47,7 @@ int Num_of_Clients;
 char Target[MAX_BUFFER];
 unsigned char ID_key[8];
 unsigned char * Temp_key;
+socklen_t client_len = sizeof(Server);
 
 /* Function Prototypes*/
 int whoAmI(void);
@@ -69,12 +70,27 @@ int main(void){
         DNS_Server.Clients[i].fd = -1;
     }
     Get_Bytes(&ID_key, 8);
+    DNS_Server.Clients[0].fd = Socket;
+    DNS_Server.Clients[0].events = POLLIN;
     while (1){
         int c = 0;
         while( c == 0){
             if(poll(DNS_Server.Clients, MAX_NUM_OF_CONNECTIONS, 5000) !=0){c = 1;}
         };
-        for( int i = 0; i<MAX_NUM_OF_CONNECTIONS; i++){
+        
+        if(DNS_Server.Clients[0].revents && POLLIN){
+            int client_sock = accept(Socket,(struct sockaddr *) clients[Num_of_Clients], &client_len);
+            for (int i =0; i<MAX_NUM_OF_CONNECTIONS;i++){
+                if(DNS_Server.Clients[i].fd == -1){
+                    DNS_Server.Clients[i].fd = client_sock;
+                    DNS_Server.Clients[i].events = POLLIN;
+                    Num_of_Clients++;
+                    break;
+                }
+            }
+        }
+        for( int i = 1; i<MAX_NUM_OF_CONNECTIONS; i++){
+            if(DNS_Server.Clients[i].fd == -1) continue;
             if( DNS_Server.Clients[i].revents && POLLIN){
                 read(DNS_Server.Clients[i].fd, &action, sizeof(char));
                 switch(action){
@@ -83,11 +99,13 @@ int main(void){
                     case register_Device:
                         read(DNS_Server.Clients[i].fd, &DNS_Server.Users[i].Name, MAX_BUFFER);
                         read(DNS_Server.Clients[i].fd, DNS_Server.Users[i].IP_addr, 16);
+                        /* send Name and public key*/
                         write(DNS_Server.Clients[i].fd, &Num_of_Clients, sizeof(int));
                         Num_of_Clients++;
                         unsigned char *val = Make_Key(malloc(sizeof(char)* 8));
                         strncpy(DNS_Server.Users[i].key, (const char *)val, 8);
                         write(DNS_Server.Clients[i].fd, DNS_Server.Users[i].key, sizeof(DNS_Server.Users[i].key));
+                        write(DNS_Server.Clients[i].fd, ID_key, sizeof(ID_key));
                         write(DNS_Server.Clients[i].fd, hostbuffer, sizeof(hostbuffer));
                         break;
                         

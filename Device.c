@@ -5,20 +5,6 @@
 //  Created by Randy Terry on 3/19/25.
 //
 
-#include "Device.h"
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <pthread.h>
-#include<poll.h>
 #include "connect.c"
 
 
@@ -49,8 +35,8 @@ struct flags{
 
 struct connections {
     struct pollfd FDs[MAX_NUM_OF_CONNECTIONS+1];
-    struct Con *User_info[MAX_NUM_OF_CONNECTIONS];
-    struct sockaddr_in * Clients[MAX_NUM_OF_CONNECTIONS];
+    struct Con *User_info[MAX_NUM_OF_CONNECTIONS+1];
+    struct sockaddr_in * Clients[MAX_NUM_OF_CONNECTIONS+1];
 } Connection_Used;
 
 /*End structures*/
@@ -65,19 +51,19 @@ struct connections {
 
 /* global variables */
 int port_num = 0;
-char hostbuffer[256];
+char hostbuffer[MAX_BUFFER];
 char *IPbuffer = NULL;
 struct hostent *host_entry;
 int hostname = 0;
-char Certificate_Authority[256];
+char Certificate_Authority[MAX_BUFFER];
 char targetbuffer[MAX_BUFFER];
 int NumOfConnections = 1;
 int LastPort;
 int current = 0;
 struct hostent *host_entry;
-struct sockaddr_in Server;
+struct sockaddr_in Server, client;
 int Socket;
-char action;
+int action;
 int Num_of_Clients;
 char Target[MAX_BUFFER];
 unsigned char ID_key[8];
@@ -96,7 +82,7 @@ socklen_t client_len = sizeof(Server);
 /* function Prototypes*/
 int set_flag(int len, const char * options[]);
 int whoAmI(void);
-struct Con * CreateConnect(void);
+struct Con ** CreateConnect(struct Con ** connection);
 int Get_info(int CA, char *dest);
 int Create_Block(char ** message);
 void Commands(void);
@@ -105,7 +91,7 @@ int Get_Key(unsigned char *mixKey);
 unsigned char * Enc(unsigned char * message, unsigned char * key);
 unsigned char * Dec(unsigned char * cipher_text, unsigned char * key);
 unsigned char * Block_Cipher(unsigned char message[BLOCK_LEN], unsigned char key[BLOCK_LEN +8]);
-void Print_Connections(void);
+void Print_Connection(void);
 int Open_Connection(int portnum, const char * dest);
 int Read_Messages(void);
 unsigned char * Make_Key(unsigned char key[8]);
@@ -120,24 +106,25 @@ unsigned char * Make_Key(unsigned char key[8]);
 
 
 int main(int argc, const char * argv[]){
-    
+    set_flag(argc, argv);
+    whoAmI();
     LastPort = MIN_PORT_NUM;
     int action;
     char message[MAX_BUFFER * 8];
     char * Text = message;
-        
-    for (int i =0; i<MAX_BUFFER; i++){
-        strncpy(&hostbuffer[i], NULL, sizeof(char));
-        strncpy(&Certificate_Authority[i], NULL, sizeof(char));
-        strncpy(&targetbuffer[i], NULL, sizeof(char));
-        strncpy(&cert.CA_Name[i], NULL, sizeof(char));
+     /*
+    for (int i = 0; i<MAX_BUFFER; i++){
+        strncpy(&hostbuffer[i], 0, sizeof(char));
+        strncpy(&Certificate_Authority[i],0, sizeof(char));
+        strncpy(&targetbuffer[i], 0, sizeof(char));
+        strncpy(&cert.CA_Name[i], 0, sizeof(char));
     }
+      */
+    puts("Buffers set to 0");
     for (int i=0; i< MAX_BUFFER * 8; i++){
         message[i] = '0';
     }
     
-    set_flag(argc, argv);
-    whoAmI();
     if(flags.Host_addr != 1){
         puts("What Certificate Authority would you like to register to?\n please format answer: 'xxx:xxx:xxx:xxx'\n Certificate IP Address: ");
         scanf("%15s",Certificate_Authority);
@@ -145,18 +132,20 @@ int main(int argc, const char * argv[]){
     }
     int fd_CA = Make_Connection(MIN_PORT_NUM, Certificate_Authority);
     if (fd_CA != -1){
-        Connection_Used.User_info[0] = CreateConnect();
-        write(fd_CA,itoa(register_Device),sizeof(char));
+        struct Con Temp;
+        Connection_Used.User_info[1] = &Temp;
+        write(fd_CA,itoa(register_Device),sizeof(char) *2);
         write(fd_CA, hostbuffer, strlen(hostbuffer));
         write(fd_CA, IPbuffer, strlen(IPbuffer));
         read(fd_CA, &cert.Device_Num, sizeof(int));
         read(fd_CA, Connection_Used.User_info[0]->ID, BLOCK_LEN/2);
         read(fd_CA, cert.ID_val, BLOCK_LEN/2);
-        read(fd_CA, cert.CA_Name, sizeof(char) * 30);
-        strncpy(Connection_Used.User_info[0]->Name, cert.CA_Name, sizeof(char)*256);
+        read(fd_CA, cert.CA_Name, sizeof(char) * MAX_BUFFER);
+        strncpy(Connection_Used.User_info[1]->Name, cert.CA_Name, sizeof(char)*MAX_BUFFER);
         NumOfConnections++;
         LastPort++;
         current++;
+        puts("device registered. \n");
     }
     Socket = socket(AF_INET,SOCK_STREAM,0);
     if (socket < 0){perror("Failed to create Socket"); exit(1);}
@@ -173,28 +162,31 @@ int main(int argc, const char * argv[]){
     }
     Connection_Used.FDs[0].fd = Socket;
     Connection_Used.FDs[0].events = POLLIN;
+    Connection_Used.FDs[1].fd = fd_CA;
+    Connection_Used.FDs[1].events = POLLIN;
+    fcntl(Socket, F_SETFL, O_NONBLOCK);
     while (1){
-        int c = 0;
-        while( c == 0){
-            if(poll(Connection_Used.FDs, MAX_NUM_OF_CONNECTIONS, -1) <0){perror("Poll unsuccessful\n"); exit(1);}
-        };
+        int status = poll(Connection_Used.FDs, MAX_NUM_OF_CONNECTIONS, 5000);
         
-        if(Connection_Used.FDs[0].revents && POLLIN){
-            int client_sock = accept(Socket,(struct sockaddr *) Connection_Used.Clients[Num_of_Clients], &client_len);
-            for (int i =1; i<MAX_NUM_OF_CONNECTIONS;i++){
-                if(Connection_Used.FDs[i].fd== -1){
-                    Connection_Used.FDs[i].fd = client_sock;
-                    Connection_Used.FDs[i].events = POLLIN;
-                    Num_of_Clients++;
-                    break;
-                }
-            }
-        }
+        if(Connection_Used.FDs[0].revents & POLLIN){
+            int client_sock = accept(Socket,(struct sockaddr *) &client, &client_len);
+            if (client_sock > 0){
+                for (int i =1; i<MAX_NUM_OF_CONNECTIONS;i++){
+                    if(Connection_Used.FDs[i].fd== -1){
+                        Connection_Used.FDs[i].fd = client_sock;
+                        Connection_Used.FDs[i].events = POLLIN;
+                        Num_of_Clients++;
+                        break;
+                    } //End if statement
+                } // End For loop
+            } // End if statement
+        } // End If statement
         
-        for( int i = 1; i<MAX_NUM_OF_CONNECTIONS; i++){
+        for( int i = 0; i<MAX_NUM_OF_CONNECTIONS; i++){
             if(Connection_Used.FDs[i].fd == -1) continue;
-            if( Connection_Used.FDs[i].revents && POLLIN){
-                read(Connection_Used.FDs[i].fd, &action, sizeof(char));
+            if( Connection_Used.FDs[i].revents & POLLIN){
+                Commands();
+                scanf("%1d\n", &action);
                 switch(action){
                     case 1:
                         Read_Messages();
@@ -205,7 +197,7 @@ int main(int argc, const char * argv[]){
                         write(Connection_Used.FDs[i].fd, Enc((unsigned char *)Text, Connection_Used.User_info[i]->ID), MAX_BUFFER);
                         break;
                     case 3:
-                        Print_Connections();
+                        Print_Connection();
                         puts("Who would you like to Talk to? \n Enter Number: ");
                         scanf("%d",&current);
                         puts("What do you want to say?\n Enter message: ");
@@ -216,7 +208,7 @@ int main(int argc, const char * argv[]){
                         
                     case 4:
                         /* Registering a new device to talk to*/
-                        Connection_Used.User_info[NumOfConnections]= CreateConnect();
+                        CreateConnect(&Connection_Used.User_info[NumOfConnections]);
                         puts("Who would you like to talk to?");
                         scanf("%255s",targetbuffer);
                         if (Get_info(fd_CA, targetbuffer) != 0){perror("get info error"); exit(1);};
@@ -236,12 +228,6 @@ int main(int argc, const char * argv[]){
     return 0;
     
 }
-
-
-
-
-
-
 
 
 /* function Definitions*/
@@ -274,9 +260,9 @@ int set_flag(int len, const char * options[]){
 
 
 int whoAmI(void){
-
+    
         // To retrieve hostname
-        hostname = gethostname(hostbuffer, sizeof(hostbuffer));
+    if (gethostname(hostbuffer, sizeof(hostbuffer)) == -1){perror("No Host Name"); exit(1);};
 
         // To retrieve host information
         host_entry = gethostbyname(hostbuffer);
@@ -287,15 +273,16 @@ int whoAmI(void){
                             host_entry->h_addr_list[0]));
 
         printf("Hostname: %s\n", hostbuffer);
-        printf("Host IP: %s", IPbuffer);
+        printf("Host IP: %s\n", IPbuffer);
 
         return 0;
 }
 
-struct Con *CreateConnect(void){
-    static struct Con *connection;
+struct Con ** CreateConnect(struct Con ** connection){
     static int Num;
     struct Con temp;
+    *connection = &temp;
+    /*
     for(int i= 0; i< MAX_BUFFER; i++){
         strncpy(&temp.Name[i], NULL, sizeof(char));
     }
@@ -304,8 +291,8 @@ struct Con *CreateConnect(void){
     }
     for(int i = 0; i<MAX_BUFFER * 8; i++){
         strncpy(&temp.Message[i], NULL, sizeof(char));
-    }
-    connection = &temp;
+    }*/
+    
     return connection;
 }
 
@@ -346,6 +333,7 @@ int Create_Block(char ** message){
 
 void Commands(void){
     printf("Connection to %s created successfully. What would you like to do?\n", Connection_Used.User_info[current]->Name);
+    printf("%d\n", current);
     puts("select from the options below:\n");
     puts("Option 1: Read incoming Messages. \n");
     puts("Option 2: send a message to the connected device.\n");
@@ -358,18 +346,18 @@ void Commands(void){
 /* look into converting an interger into a sring the safe and smart way */
 char * itoa(int x){
     switch(x){
-        case 0:
-            return "0";
-        case 1:
-            return "1";
-        case 2:
-            return "2";
-        case 3:
-            return "3";
-        case 4:
-            return "4";
-        case 5:
-            return "5";
+        case 48:
+            return "48";
+        case 49:
+            return "49";
+        case 50:
+            return "50";
+        case 51:
+            return "51";
+        case 52:
+            return "52";
+        case 53:
+            return "53";
     }
     return NULL;
 }

@@ -5,17 +5,7 @@
 //  Created by Randy Terry on 3/24/25.
 //
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <poll.h>
+
 #include "connect.c"
 
 #define MAX_NAME_LEN 256
@@ -36,13 +26,13 @@ struct DNS_server {
 
 
 /* Global Variables */
-char hostbuffer[MAX_NAME_LEN];
+char hostbuffer[MAX_BUFFER];
 char *IPbuffer = NULL;
 struct hostent *host_entry;
-struct sockaddr_in Server;
+struct sockaddr_in Server, client;
 struct sockaddr_in * clients[MAX_NUM_OF_CONNECTIONS];
 int Socket;
-char action;
+char action[2];
 int Num_of_Clients;
 char Target[MAX_BUFFER];
 unsigned char ID_key[8];
@@ -53,6 +43,7 @@ socklen_t client_len = sizeof(Server);
 int whoAmI(void);
 int Get_Bytes(void * dest, int NUMBYTES);
 unsigned char * Make_Key(unsigned char key[8]);
+
 
 int main(void){
     whoAmI();
@@ -72,31 +63,37 @@ int main(void){
     Get_Bytes(&ID_key, 8);
     DNS_Server.Clients[0].fd = Socket;
     DNS_Server.Clients[0].events = POLLIN;
+    puts("Listening for connection\n");
+    fcntl(Socket, F_SETFL, O_NONBLOCK);
     while (1){
-        int c = 0;
-        while( c == 0){
-            if(poll(DNS_Server.Clients, MAX_NUM_OF_CONNECTIONS, 5000) !=0){c = 1;}
-        };
+        int status = poll(DNS_Server.Clients, MAX_NUM_OF_CONNECTIONS, 5000);
         
-        if(DNS_Server.Clients[0].revents && POLLIN){
-            int client_sock = accept(Socket,(struct sockaddr *) clients[Num_of_Clients], &client_len);
-            for (int i =0; i<MAX_NUM_OF_CONNECTIONS;i++){
-                if(DNS_Server.Clients[i].fd == -1){
-                    DNS_Server.Clients[i].fd = client_sock;
-                    DNS_Server.Clients[i].events = POLLIN;
-                    Num_of_Clients++;
-                    break;
-                }
-            }
-        }
+        if(DNS_Server.Clients[0].revents & POLLIN){
+            int client_sock = accept(Socket,(struct sockaddr*) &client, &client_len);
+            printf("Connection made %d\n", client_sock);
+            if ( client_sock > 0){
+                for (int i = 1; i<MAX_NUM_OF_CONNECTIONS;i++){
+                    if(DNS_Server.Clients[i].fd == -1){
+                        DNS_Server.Clients[i].fd = client_sock;
+                        DNS_Server.Clients[i].events = POLLIN;
+                        Num_of_Clients++;
+                        client_sock = 0;
+                        printf("New connection stored: %d\n", Num_of_Clients);
+                        break;
+                    } //End if-statement
+                } //End For loop
+            } //End If statement
+        } // End If statement
         for( int i = 1; i<MAX_NUM_OF_CONNECTIONS; i++){
             if(DNS_Server.Clients[i].fd == -1) continue;
-            if( DNS_Server.Clients[i].revents && POLLIN){
-                read(DNS_Server.Clients[i].fd, &action, sizeof(char));
-                switch(action){
-                        
+            if( DNS_Server.Clients[i].revents & POLLIN){
+                read(DNS_Server.Clients[i].fd, &action, sizeof(char) *2);
+                puts("Looking for action to be done?\n");
+                int op = atoi(action);
+                switch(op){
                         
                     case register_Device:
+                        puts("Registering Device\n");
                         read(DNS_Server.Clients[i].fd, &DNS_Server.Users[i].Name, MAX_BUFFER);
                         read(DNS_Server.Clients[i].fd, DNS_Server.Users[i].IP_addr, 16);
                         /* send Name and public key*/
@@ -107,12 +104,15 @@ int main(void){
                         write(DNS_Server.Clients[i].fd, DNS_Server.Users[i].key, sizeof(DNS_Server.Users[i].key));
                         write(DNS_Server.Clients[i].fd, ID_key, sizeof(ID_key));
                         write(DNS_Server.Clients[i].fd, hostbuffer, sizeof(hostbuffer));
+                        puts("Done. \n");
                         break;
                         
                         
                     case request_device:
+                        puts("Reqesting device information\n");
                         read(DNS_Server.Clients[i].fd, &Target, sizeof(Target));
-                        for( int c = 0; c< Num_of_Clients; c++){
+                        int c;
+                        for(c = 0; c< Num_of_Clients; c++){
                             if(strcmp(Target, DNS_Server.Users[c].Name) == 1){ write(DNS_Server.Clients[i].fd, DNS_Server.Users[c].Name, MAX_BUFFER); write(DNS_Server.Clients[i].fd, DNS_Server.Users[c].IP_addr, 16);}
                         }
                         
@@ -121,6 +121,7 @@ int main(void){
                         break;
                         
                     case Request_KEY:
+                        puts("creating and sending key\n");
                         Temp_key= Make_Key(malloc(sizeof(char)*8));
                         write(DNS_Server.Clients[i].fd, Temp_key, 8);
                         strncpy(DNS_Server.Users[i].key, (const char *)Temp_key, 8);
@@ -138,9 +139,8 @@ int main(void){
 /* Function Definitions */
 int whoAmI(void){
     
-    int hostname;
         // To retrieve hostname
-    if (gethostname(hostbuffer, sizeof(hostbuffer)) == 0){perror("No Host Name"); exit(1);};
+    if (gethostname(hostbuffer, sizeof(hostbuffer)) == -1){perror("No Host Name"); exit(1);};
 
         // To retrieve host information
         host_entry = gethostbyname(hostbuffer);
@@ -148,10 +148,10 @@ int whoAmI(void){
         // To convert an Internet network
         // address into ASCII string
         IPbuffer = inet_ntoa(*((struct in_addr*)
-                            host_entry->h_addr_list[0]));
+                            host_entry->h_addr_list[1]));
 
         printf("Hostname: %s\n", hostbuffer);
-        printf("Host IP: %s", IPbuffer);
+        printf("Host IP: %s\n", IPbuffer);
 
         return 0;
 }
@@ -169,3 +169,4 @@ unsigned char * Make_Key(unsigned char key[8]){
     }
     return key;
 }
+

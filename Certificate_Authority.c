@@ -2,7 +2,6 @@
 //  Certificate_Authority.c
 //  skm
 //
-//  Created by Randy Terry on 3/24/25.
 //
 
 

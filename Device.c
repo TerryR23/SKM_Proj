@@ -2,7 +2,6 @@
 //  Device.c
 //  skm
 //
-//  Created by Randy Terry on 3/19/25.
 //
 
 #include "connect.c"
